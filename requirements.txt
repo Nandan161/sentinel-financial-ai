@@ -1,0 +1,7 @@
+langchain
+langchain-ollama
+chromadb
+streamlit
+pypdf
+presidio-analyzer
+presidio-anonymizer
