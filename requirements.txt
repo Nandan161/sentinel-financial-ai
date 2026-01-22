@@ -1,5 +1,6 @@
 langchain
 langchain-ollama
+langchain-text-splitters
 chromadb
 streamlit
 pypdf
