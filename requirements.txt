@@ -1,10 +1,11 @@
 langchain
 langchain-ollama
 langchain-text-splitters
+langchain-community
+langchain_core
 chromadb
 streamlit
 pypdf
 presidio-analyzer
 presidio-anonymizer
 spacy
-streamlit

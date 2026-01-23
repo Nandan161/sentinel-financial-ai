@@ -1,51 +1,76 @@
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from src.utils.vector_store import FinancialVectorStore
+from pathlib import Path
 
 class FinancialRAGEngine:
     def __init__(self):
         self.vector_store = FinancialVectorStore()
-        # We don't need to define self.retriever here anymore 
-        # because we define it dynamically inside the query() method now!
-        # The Brain: Using Llama 3 for reasoning
-        self.llm = OllamaLLM(model="llama3")
-        
+        self.llm = OllamaLLM(model="llama3", temperature=0)
 
-        # The Instruction: Telling the AI how to behave
-        self.template = """
-        You are a senior financial analyst at Sentinel AI. 
-        Use the following pieces of retrieved context to answer the user's question.
-        If the answer is not in the context, say that you don't know. 
-        Keep the answer professional and concise.
+        # UPDATED TEMPLATE: Dynamically handles multiple documents
+        self.template = """### System:
+You are a Financial Analyst. You have been given chunks from multiple reports.
+Your task is to compare metrics (like Revenue, Profit, etc.) between these reports.
 
-        Context: {context}
-        Question: {question}
+RULES:
+1. Identify companies based on the 'DOCUMENT SOURCE' labels provided in the context.
+2. If the data is redacted (e.g., [PERSON_NAME]), leave it redacted.
+3. If the reports are for different periods, note that in your comparison.
+4. If you see data for Company A and Company B, you ARE allowed to compare them.
+
+### Context:
+{context}
+
+### Question:
+{question}
+
+### Answer:"""
         
-        Answer:"""
         self.prompt = ChatPromptTemplate.from_template(self.template)
 
-    def query(self, user_question, collection_name="tesla_10k_report"):
-        # 1. We now tell the retriever which specific 'drawer' (collection) to open
-        retriever = self.vector_store.get_retriever(collection_name=collection_name)
-        docs = retriever.invoke(user_question)
-        
-        context_text = "\n\n".join([doc.page_content for doc in docs])
-        
-        # 2. Build the final prompt using the retrieved context
-        formatted_prompt = self.prompt.format(context=context_text, question=user_question)
-        
-        # 3. Get the final answer from Llama 3
-        print(f"\n--- Sentinel is searching in: {collection_name} ---")
-        response = self.llm.invoke(formatted_prompt)
-        return response
+    def query(self, user_question, collection_names):
+        if isinstance(collection_names, str):
+            collection_names = [collection_names]
 
-if __name__ == "__main__":
-    engine = FinancialRAGEngine()
-    
-    while True:
-        query = input("\nAsk a question about the 10-K (or type 'exit'): ")
-        if query.lower() == 'exit':
-            break
+        all_docs = []
+        # We track which files were actually retrieved to help the AI map them
+        found_sources = set()
+
+        for coll in collection_names:
+            try:
+                retriever = self.vector_store.get_retriever(collection_name=coll)
+                chunks = retriever.invoke(user_question)
+                print(f"DEBUG: Found {len(chunks)} chunks for collection {coll}") # Check your terminal!
+                
+                for chunk in chunks:
+                    # Capture the filename for the dynamic prompt
+                    fname = Path(chunk.metadata.get("source", coll)).name
+                    found_sources.add(fname)
+                    
+                    # INJECT DYNAMIC LABEL: This tells the AI exactly which company this chunk belongs to
+                    chunk.page_content = f">>> DATA FROM REPORT: {fname} <<<\n{chunk.page_content}"
+                
+                all_docs.extend(chunks)
+            except Exception as e:
+                print(f"Error: {e}")
+
+        # Combine Context
+        context_text = "\n\n".join([doc.page_content for doc in all_docs])
         
-        answer = engine.query(query)
-        print(f"\n[Sentinel]: {answer}")
+        # FINAL SAFEGUARD: Inform the AI which files are available
+        if found_sources:
+            header = f"The following reports are currently available for analysis: {', '.join(found_sources)}\n\n"
+            context_text = header + context_text
+
+        if not all_docs:
+            return {
+                "answer": "I found no data matching your query in the selected reports. Try asking about specific metrics like 'revenue' or 'expenses'.",
+                "sources": []
+            }
+
+        chain = self.prompt | self.llm
+        response = chain.invoke({"context": context_text, "question": user_question})
+        
+        return {"answer": response, "sources": all_docs}

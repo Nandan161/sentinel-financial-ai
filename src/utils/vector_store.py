@@ -1,41 +1,48 @@
 import os
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
+import chromadb
+from chromadb import PersistentClient
 
 class FinancialVectorStore:
     def __init__(self, persist_dir="chroma_db"):
         self.persist_dir = persist_dir
-        # Using the model we just pulled in Ollama
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
+        # Use PersistentClient to manage collection metadata
+        self.client = chromadb.PersistentClient(path=self.persist_dir)
 
-    def create_store(self, chunks, collection_name="tesla_10k_report"):
-        print(f"--- Creating Vector Store for {collection_name} ---")
-        
-        # This part prevents mixing different PDFs in the same "shelf"
+    def collection_exists(self, collection_name):
+        """Checks if a collection already exists and has data."""
         try:
-            from chromadb import PersistentClient
-            client = PersistentClient(path=self.persist_dir)
-            # Delete old version of this collection if it exists
-            client.delete_collection(name=collection_name)
-        except:
-            pass 
+            # Check if collection is in the list of existing collections
+            collection_names = [c.name for c in self.client.list_collections()]
+            if collection_name in collection_names:
+                col = self.client.get_collection(name=collection_name)
+                return col.count() > 0
+            return False
+        except Exception:
+            return False
 
-        vector_db = Chroma.from_texts(
-            texts=chunks,
+    def create_store(self, chunks, collection_name):
+        """Creates a new store ONLY if called. Logic for skipping should be in app.py."""
+        print(f"--- Indexing Documents for: {collection_name} ---")
+        
+        vector_db = Chroma.from_documents(
+            documents=chunks,
             embedding=self.embeddings,
             persist_directory=self.persist_dir,
             collection_name=collection_name
         )
-        print(f"✅ Vector Store for {collection_name} Created Successfully!")
         return vector_db
 
-    def get_retriever(self, collection_name="tesla_10k_report"): 
+    def get_retriever(self, collection_name):
+        """Dynamically loads the specific collection for a selected document."""
         vector_db = Chroma(
             persist_directory=self.persist_dir,
             embedding_function=self.embeddings,
             collection_name=collection_name
         )
-        return vector_db.as_retriever(search_kwargs={"k": 3})
+        return vector_db.as_retriever(search_kwargs={"k": 10})
 
 if __name__ == "__main__":
     # Test Logic: Connect Ingestor + VectorStore
