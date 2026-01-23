@@ -4,12 +4,12 @@ from src.utils.vector_store import FinancialVectorStore
 
 class FinancialRAGEngine:
     def __init__(self):
+        self.vector_store = FinancialVectorStore()
+        # We don't need to define self.retriever here anymore 
+        # because we define it dynamically inside the query() method now!
         # The Brain: Using Llama 3 for reasoning
         self.llm = OllamaLLM(model="llama3")
         
-        # The Memory: Accessing our ChromaDB
-        self.vector_store = FinancialVectorStore()
-        self.retriever = self.vector_store.get_retriever()
 
         # The Instruction: Telling the AI how to behave
         self.template = """
@@ -24,16 +24,18 @@ class FinancialRAGEngine:
         Answer:"""
         self.prompt = ChatPromptTemplate.from_template(self.template)
 
-    def query(self, user_question):
-        # 1. Get relevant chunks from memory
-        docs = self.retriever.invoke(user_question)
+    def query(self, user_question, collection_name="tesla_10k_report"):
+        # 1. We now tell the retriever which specific 'drawer' (collection) to open
+        retriever = self.vector_store.get_retriever(collection_name=collection_name)
+        docs = retriever.invoke(user_question)
+        
         context_text = "\n\n".join([doc.page_content for doc in docs])
         
-        # 2. Build the final prompt
+        # 2. Build the final prompt using the retrieved context
         formatted_prompt = self.prompt.format(context=context_text, question=user_question)
         
-        # 3. Get response from Llama 3
-        print("\n--- Sentinel is thinking... ---")
+        # 3. Get the final answer from Llama 3
+        print(f"\n--- Sentinel is searching in: {collection_name} ---")
         response = self.llm.invoke(formatted_prompt)
         return response
 

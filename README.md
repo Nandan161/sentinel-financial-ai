@@ -45,3 +45,14 @@ The project is built on a "Privacy-First" pipeline:
 - **Testing Result:** - **In-Scope:** Successfully identified technical risks (4680 battery cells).
   - **Out-of-Scope:** Correctly refused to answer non-financial questions (e.g., baking recipes).
   - **Privacy:** Maintained integrity by not attempting to "guess" redacted PII.
+
+  ## 🚀 Recent Updates
+- **Multi-Document Management:** Added support for independent vector collections. Users can now index and switch between different financial reports (e.g., Apple vs. Tesla) without data leakage.
+- **Dynamic Retrieval:** Refactored the engine to instantiate retrievers on-the-fly based on the active document.
+- **Enhanced Chat UI:** Implemented `st.session_state` to maintain a persistent chat history, providing a seamless user experience.
+
+## 🛠️ Technical Stack
+- **LLM:** Llama 3 (via Ollama)
+- **Vector DB:** ChromaDB
+- **Framework:** LangChain & Streamlit
+- **Privacy:** In-built PII Redaction layer

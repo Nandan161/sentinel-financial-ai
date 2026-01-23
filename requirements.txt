@@ -7,3 +7,4 @@ pypdf
 presidio-analyzer
 presidio-anonymizer
 spacy
+streamlit

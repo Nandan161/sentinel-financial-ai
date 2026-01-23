@@ -8,26 +8,32 @@ class FinancialVectorStore:
         # Using the model we just pulled in Ollama
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
-    def create_store(self, chunks):
-        print(f"--- Creating Vector Store in {self.persist_dir} ---")
+    def create_store(self, chunks, collection_name="tesla_10k_report"):
+        print(f"--- Creating Vector Store for {collection_name} ---")
         
-        # This command does 3 things: 
-        # 1. Embeds each chunk, 2. Indexes them, 3. Saves to disk
+        # This part prevents mixing different PDFs in the same "shelf"
+        try:
+            from chromadb import PersistentClient
+            client = PersistentClient(path=self.persist_dir)
+            # Delete old version of this collection if it exists
+            client.delete_collection(name=collection_name)
+        except:
+            pass 
+
         vector_db = Chroma.from_texts(
             texts=chunks,
             embedding=self.embeddings,
             persist_directory=self.persist_dir,
-            collection_name="tesla_10k_report"
+            collection_name=collection_name
         )
-        print("✅ Vector Store Created and Persisted Successfully!")
+        print(f"✅ Vector Store for {collection_name} Created Successfully!")
         return vector_db
 
-    def get_retriever(self):
-        # Load the existing store
+    def get_retriever(self, collection_name="tesla_10k_report"): 
         vector_db = Chroma(
             persist_directory=self.persist_dir,
             embedding_function=self.embeddings,
-            collection_name="tesla_10k_report"
+            collection_name=collection_name
         )
         return vector_db.as_retriever(search_kwargs={"k": 3})
 
