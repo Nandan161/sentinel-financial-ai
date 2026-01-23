@@ -39,5 +39,9 @@ The project is built on a "Privacy-First" pipeline:
 - **The Solution:** Built a `FinancialIngestor` that uses Recursive Character Splitting (1000 char chunks).
 - **Result:** Processed Tesla’s 2024 10-K into **477 secure, searchable chunks** stored in ChromaDB.
 
-### 🕒 Milestone 3: The RAG Intelligence Engine (In Progress)
-- **Goal:** Connect the Vector Store to Llama 3 to allow natural language querying.
+### ✅ Milestone 3: The RAG Intelligence Engine (Completed)
+- **The Challenge:** Ensuring the LLM stays "grounded" to the financial data and doesn't hallucinate.
+- **The Solution:** Implemented a Retrieval-Augmented Generation (RAG) loop using `langchain-core` and Llama 3.
+- **Testing Result:** - **In-Scope:** Successfully identified technical risks (4680 battery cells).
+  - **Out-of-Scope:** Correctly refused to answer non-financial questions (e.g., baking recipes).
+  - **Privacy:** Maintained integrity by not attempting to "guess" redacted PII.
