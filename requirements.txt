@@ -3,9 +3,11 @@ langchain-ollama
 langchain-text-splitters
 langchain-community
 langchain_core
+langchain_chroma
 chromadb
 streamlit
 pypdf
 presidio-analyzer
 presidio-anonymizer
 spacy
+streamlit
