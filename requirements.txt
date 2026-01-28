@@ -11,3 +11,13 @@ presidio-analyzer
 presidio-anonymizer
 spacy
 streamlit
+# Additional packages for enhanced functionality
+en-core-web-lq==3.8.0
+opencv-python==4.13.0.90
+pdf2image==1.17.0
+pytesseract==0.3.13
+pillow==12.1.0
+numpy==2.4.1
+# Security and monitoring packages
+coloredlogs==15.0.1
+humanfriendly==10.0

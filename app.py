@@ -1,5 +1,3 @@
-# app.py - PRODUCTION VERSION
-
 import streamlit as st
 import os
 import logging
@@ -44,16 +42,36 @@ if "processing_errors" not in st.session_state:
 
 # --- 3. Helper Functions ---
 def sanitize_filename(filename: str) -> str:
-    """Sanitize filename to prevent path traversal"""
-    # Get basename to prevent directory traversal
+    """Sanitize filename to prevent path traversal and injection attacks"""
+    if not filename:
+        return ""
+    
+    # Remove path separators to prevent directory traversal
     safe_name = os.path.basename(filename)
-    # Remove any remaining path separators
-    safe_name = safe_name.replace('/', '').replace('\\', '')
+    safe_name = safe_name.replace('/', '').replace('\\', '').replace('..', '')
+    
+    # Remove potentially dangerous characters
+    dangerous_chars = ['<', '>', ':', '"', '|', '?', '*', '&', ';', '$', '`', '\\']
+    for char in dangerous_chars:
+        safe_name = safe_name.replace(char, '')
+    
+    # Remove leading dots to prevent hidden files
+    safe_name = safe_name.lstrip('.')
+    
+    # Ensure filename is not empty after sanitization
+    if not safe_name:
+        return "uploaded_file"
+    
+    # Limit filename length
+    if len(safe_name) > 255:
+        name, ext = os.path.splitext(safe_name)
+        safe_name = name[:250] + ext
+    
     return safe_name
 
 def validate_upload(uploaded_file) -> tuple[bool, str]:
     """
-    Validate uploaded file
+    Validate uploaded file with comprehensive security checks
     
     Returns:
         (is_valid, error_message)
@@ -61,15 +79,44 @@ def validate_upload(uploaded_file) -> tuple[bool, str]:
     if uploaded_file is None:
         return False, "No file provided"
     
-    # Check extension
-    ext = Path(uploaded_file.name).suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return False, f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+    # Check filename
+    if not uploaded_file.name:
+        return False, "File has no name"
     
-    # Check size
-    file_size_mb = uploaded_file.size / (1024 * 1024)
-    if file_size_mb > MAX_UPLOAD_SIZE_MB:
-        return False, f"File too large ({file_size_mb:.1f}MB). Maximum: {MAX_UPLOAD_SIZE_MB}MB"
+    # Sanitize filename
+    safe_filename = sanitize_filename(uploaded_file.name)
+    if not safe_filename:
+        return False, "Invalid filename"
+    
+    # Check extension
+    ext = Path(safe_filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+    
+    # Check file size
+    try:
+        file_size_mb = uploaded_file.size / (1024 * 1024)
+        if file_size_mb > MAX_UPLOAD_SIZE_MB:
+            return False, f"File too large ({file_size_mb:.1f}MB). Maximum: {MAX_UPLOAD_SIZE_MB}MB"
+        
+        if file_size_mb == 0:
+            return False, "File is empty"
+    except Exception as e:
+        logger.error(f"Error checking file size: {e}")
+        return False, "Unable to read file size"
+    
+    # Additional security checks
+    try:
+        # Check if file is actually a PDF (basic magic number check)
+        uploaded_file.seek(0)
+        header = uploaded_file.read(4)
+        uploaded_file.seek(0)  # Reset position
+        
+        if header != b'%PDF':
+            return False, "File is not a valid PDF document"
+    except Exception as e:
+        logger.error(f"Error validating PDF format: {e}")
+        return False, "Unable to validate file format"
     
     return True, ""
 

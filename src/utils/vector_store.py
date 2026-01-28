@@ -47,22 +47,28 @@ class FinancialVectorStore:
         Returns:
             True if collection exists and has documents, False otherwise
         """
+        # Sanitize collection name
+        safe_name = self._sanitize_collection_name(collection_name)
+        if not safe_name:
+            logger.warning(f"Invalid collection name: {collection_name}")
+            return False
+        
         try:
             collection_names = [c.name for c in self.client.list_collections()]
             
-            if collection_name not in collection_names:
-                logger.debug(f"Collection '{collection_name}' does not exist")
+            if safe_name not in collection_names:
+                logger.debug(f"Collection '{safe_name}' does not exist")
                 return False
             
             # Check if collection has documents
-            col = self.client.get_collection(name=collection_name)
+            col = self.client.get_collection(name=safe_name)
             count = col.count()
             
-            logger.debug(f"Collection '{collection_name}' has {count} documents")
+            logger.debug(f"Collection '{safe_name}' has {count} documents")
             return count > 0
             
         except Exception as e:
-            logger.error(f"Error checking collection '{collection_name}': {e}")
+            logger.error(f"Error checking collection '{safe_name}': {e}")
             return False
     
     def get_collection_stats(self, collection_name: str) -> dict:
@@ -279,6 +285,30 @@ class FinancialVectorStore:
         except Exception as e:
             logger.error(f"Failed to get total documents: {e}")
             return 0
+    
+    def _sanitize_collection_name(self, name: str) -> str:
+        """
+        Sanitize collection name to prevent injection attacks
+        
+        Args:
+            name: Collection name to sanitize
+            
+        Returns:
+            Sanitized collection name or empty string if invalid
+        """
+        if not name:
+            return ""
+        
+        # Only allow alphanumeric characters and underscores
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+        
+        # Must not be empty and not start with number
+        if not safe_name or safe_name[0].isdigit():
+            logger.warning(f"Invalid collection name: {name}")
+            return ""
+        
+        return safe_name
 
 
 class MultiCollectionRetriever:

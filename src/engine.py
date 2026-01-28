@@ -5,6 +5,7 @@ from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 from src.utils.vector_store import FinancialVectorStore, VectorStoreError
+from src.utils.hybrid_search import AdvancedSearchEngine
 from config import config
 import streamlit as st
 
@@ -30,6 +31,21 @@ class FinancialRAGEngine:
                 temperature=config.LLM_TEMPERATURE
             )
             logger.info(f"LLM initialized: {config.LLM_MODEL}")
+            
+            # Initialize hybrid search engine
+            try:
+                self.search_engine = AdvancedSearchEngine(
+                    vector_store=self.vector_store.get_store(),
+                    embeddings=self.vector_store.embeddings,
+                    keyword_weight=0.3,
+                    semantic_weight=0.7,
+                    top_k=10
+                )
+                logger.info("Hybrid search engine initialized successfully")
+            except Exception as e:
+                logger.warning(f"Hybrid search engine initialization failed: {e}")
+                logger.info("Falling back to standard retrieval methods")
+                self.search_engine = None
             
             # Create prompt template
             self._initialize_prompt()
@@ -79,6 +95,55 @@ YOUR ANALYSIS:"""
     def _get_cache_key(self, query: str, collections: List[str]) -> str:
         """Generate cache key for query"""
         return f"{query}::{','.join(sorted(collections))}"
+    
+    def _sanitize_input(self, text: str) -> str:
+        """
+        Sanitize user input to prevent injection attacks
+        
+        Args:
+            text: User input to sanitize
+            
+        Returns:
+            Sanitized text
+        """
+        if not text:
+            return ""
+        
+        # Remove potentially dangerous characters
+        dangerous_chars = ['<', '>', '"', "'", ';', '&', '|', '$', '`', '\\']
+        for char in dangerous_chars:
+            text = text.replace(char, '')
+        
+        # Limit length to prevent DoS
+        if len(text) > 1000:
+            text = text[:1000]
+            logger.warning("Input text truncated to 1000 characters")
+        
+        return text.strip()
+    
+    def _sanitize_collection_name(self, name: str) -> str:
+        """
+        Sanitize collection name to prevent injection attacks
+        
+        Args:
+            name: Collection name to sanitize
+            
+        Returns:
+            Sanitized collection name or empty string if invalid
+        """
+        if not name:
+            return ""
+        
+        # Only allow alphanumeric characters and underscores
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+        
+        # Must not be empty and not start with number
+        if not safe_name or safe_name[0].isdigit():
+            logger.warning(f"Invalid collection name: {name}")
+            return ""
+        
+        return safe_name
     
     def _format_context(
         self, 
@@ -133,7 +198,7 @@ YOUR ANALYSIS:"""
         k: Optional[int] = None
     ) -> Dict:
         """
-        Query the RAG system with enhanced multi-document support
+        Query the RAG system with enhanced multi-document support and comprehensive error handling
         
         Args:
             user_question: User's question
@@ -141,55 +206,105 @@ YOUR ANALYSIS:"""
             k: Number of chunks to retrieve (uses config default if None)
             
         Returns:
-            Dictionary with 'answer' and 'sources' keys
+            Dictionary with 'answer', 'sources', and 'source_stats' keys
+            
+        Raises:
+            RAGEngineError: For critical system failures
         """
-        # Input validation
+        # Input validation with enhanced sanitization
         if not user_question or not user_question.strip():
             return {
                 "answer": "Please provide a question to analyze the documents.",
-                "sources": []
+                "sources": [],
+                "source_stats": {}
             }
+        
+        # Sanitize user input
+        user_question = self._sanitize_input(user_question)
         
         if not collection_names:
             return {
                 "answer": "No documents selected. Please activate at least one document from the sidebar.",
-                "sources": []
+                "sources": [],
+                "source_stats": {}
             }
         
-        # Ensure list format
+        # Ensure list format and validate collection names
         if isinstance(collection_names, str):
             collection_names = [collection_names]
+        
+        # Validate collection names (prevent injection attacks)
+        validated_collections = []
+        for name in collection_names:
+            safe_name = self._sanitize_collection_name(name)
+            if safe_name:
+                validated_collections.append(safe_name)
+        
+        if not validated_collections:
+            return {
+                "answer": "Invalid document selection. Please choose valid documents.",
+                "sources": [],
+                "source_stats": {}
+            }
         
         try:
             # Check cache
             if self._query_cache is not None:
-                cache_key = self._get_cache_key(user_question, collection_names)
+                cache_key = self._get_cache_key(user_question, validated_collections)
                 if cache_key in self._query_cache:
                     logger.info("Returning cached result")
                     return self._query_cache[cache_key]
             
-            logger.info(f"Processing query: '{user_question[:50]}...' across {len(collection_names)} collection(s)")
+            logger.info(f"Processing query: '{user_question[:50]}...' across {len(validated_collections)} collection(s)")
             
-            # Retrieve documents
-            all_docs, source_stats = self._retrieve_documents(
-                user_question, 
-                collection_names,
-                k
-            )
+            # Retrieve documents with timeout handling
+            try:
+                all_docs, source_stats = self._retrieve_documents(
+                    user_question, 
+                    validated_collections,
+                    k
+                )
+            except VectorStoreError as e:
+                logger.error(f"Vector store retrieval failed: {e}")
+                return {
+                    "answer": f"Unable to access document database. Please try again later. Error: {str(e)}",
+                    "sources": [],
+                    "source_stats": {}
+                }
             
             if not all_docs:
                 return {
-                    "answer": self._generate_no_results_message(collection_names),
-                    "sources": []
+                    "answer": self._generate_no_results_message(validated_collections),
+                    "sources": [],
+                    "source_stats": {}
                 }
             
-            # Format context
-            context_text, source_stats = self._format_context(all_docs, collection_names)
+            # Format context with validation
+            try:
+                context_text, source_stats = self._format_context(all_docs, validated_collections)
+            except Exception as e:
+                logger.error(f"Context formatting failed: {e}")
+                return {
+                    "answer": "Error processing document context. Please try a different query.",
+                    "sources": [],
+                    "source_stats": {}
+                }
             
             logger.info(f"Context prepared: {len(all_docs)} chunks from {len(source_stats)} sources")
             
-            # Generate response
-            answer = self._generate_answer(context_text, user_question)
+            # Generate response with LLM error handling
+            try:
+                answer = self._generate_answer(context_text, user_question)
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                return {
+                    "answer": (
+                        "I encountered an error while generating the response. "
+                        "This might be due to system issues. Please try again."
+                    ),
+                    "sources": all_docs,
+                    "source_stats": source_stats
+                }
             
             result = {
                 "answer": answer,
@@ -197,25 +312,31 @@ YOUR ANALYSIS:"""
                 "source_stats": source_stats
             }
             
-            # Cache result
+            # Cache result with size limits
             if self._query_cache is not None:
-                cache_key = self._get_cache_key(user_question, collection_names)
-                self._query_cache[cache_key] = result
+                cache_key = self._get_cache_key(user_question, validated_collections)
+                # Limit cache size to prevent memory issues
+                if len(self._query_cache) < 100:  # Max 100 cached queries
+                    self._query_cache[cache_key] = result
+                else:
+                    logger.warning("Cache size limit reached, skipping cache storage")
             
             logger.info("Query completed successfully")
             return result
             
-        except VectorStoreError as e:
-            logger.error(f"Vector store error during query: {e}")
+        except RAGEngineError as e:
+            logger.error(f"Critical RAG engine error: {e}")
             return {
-                "answer": f"Error accessing document database: {str(e)}",
-                "sources": []
+                "answer": f"System error occurred: {str(e)}",
+                "sources": [],
+                "source_stats": {}
             }
         except Exception as e:
             logger.error(f"Unexpected error during query: {e}", exc_info=True)
             return {
-                "answer": f"An error occurred while processing your query: {str(e)}",
-                "sources": []
+                "answer": f"An unexpected error occurred: {str(e)}",
+                "sources": [],
+                "source_stats": {}
             }
     
     def _retrieve_documents(

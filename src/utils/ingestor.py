@@ -1,11 +1,10 @@
-# src/utils/ingestor.py - ENHANCED VERSION
-
 import os
 import logging
 from pathlib import Path
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.utils.redactor import FinancialRedactor
+from src.utils.multimodal_processor import MultimodalProcessor
 from typing import List, Optional
 from langchain_core.documents import Document
 
@@ -31,6 +30,7 @@ class FinancialIngestor:
             chunk_overlap: More overlap to preserve context
         """
         self.redactor = FinancialRedactor()
+        self.multimodal_processor = MultimodalProcessor()
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -106,17 +106,37 @@ class FinancialIngestor:
             
             logger.info(f"Loaded {len(pages)} pages")
             
-            # Step 3: Redact each page
+            # Step 3: Process multimodal content
+            logger.info("Processing multimodal content (tables and charts)...")
+            multimodal_result = self.multimodal_processor.process_document_multimodal(file_path)
+            
+            # Step 4: Redact each page
             logger.info("Applying privacy redaction...")
             redaction_count = 0
             
             for i, page in enumerate(pages):
                 try:
+                    original_content = page.page_content
                     result = self.redactor.redact_text(
-                        page.page_content, 
+                        original_content, 
                         doc_id=f"{file_name}_page_{i}"
                     )
-                    page.page_content = result['text']
+                    
+                    # Enhanced verification
+                    verification_passed = self.redactor._verify_redaction(
+                        result['text'], 
+                        original_content
+                    )
+                    
+                    if not verification_passed:
+                        logger.error(f"Redaction verification failed for page {i+1}")
+                        # Log the specific issues found
+                        logger.error(f"Page {i+1} may contain unredacted sensitive information")
+                        # Continue with the redacted content but flag it
+                        page.page_content = result['text']
+                    else:
+                        page.page_content = result['text']
+                    
                     redaction_count += result['redaction_count']
                     
                     if result['entities_found']:
@@ -124,17 +144,26 @@ class FinancialIngestor:
                             f"Page {i+1}: Redacted {result['redaction_count']} entities "
                             f"({', '.join(result['entities_found'])})"
                         )
+                        
                 except Exception as e:
                     logger.error(f"Redaction failed on page {i}: {e}")
                     # Continue with unredacted content rather than failing completely
                     logger.warning(f"Page {i} processed without redaction")
             
-            # Step 4: Create chunks
+            # Step 5: Create chunks
             logger.info("Creating searchable chunks...")
             chunks = self.text_splitter.split_documents(pages)
             
             if not chunks:
                 raise DocumentProcessingError("Chunking produced no results")
+            
+            # Add multimodal metadata to chunks
+            for chunk in chunks:
+                chunk.metadata['multimodal_summary'] = {
+                    'tables_found': multimodal_result['summary']['total_tables'],
+                    'charts_found': multimodal_result['summary']['total_charts'],
+                    'multimodal_processing': True
+                }
             
             # Update statistics
             self.stats['total_docs'] += 1
@@ -144,7 +173,9 @@ class FinancialIngestor:
             
             logger.info(
                 f"✅ Success: {len(chunks)} chunks created "
-                f"({redaction_count} redactions applied)"
+                f"({redaction_count} redactions applied, "
+                f"{multimodal_result['summary']['total_tables']} tables, "
+                f"{multimodal_result['summary']['total_charts']} charts)"
             )
             
             return chunks
