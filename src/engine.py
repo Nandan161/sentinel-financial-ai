@@ -25,23 +25,24 @@ class FinancialRAGEngine:
             self.vector_store = FinancialVectorStore()
             logger.info("Vector store initialized")
             
-            # Initialize LLM
+            # Initialize LLM with performance optimizations
             self.llm = OllamaLLM(
                 model=config.LLM_MODEL,
-                temperature=config.LLM_TEMPERATURE
+                temperature=config.LLM_TEMPERATURE,
+                num_predict=512,  # Limit response length for faster responses
+                top_k=40,         # Optimize for quality vs speed
+                top_p=0.9,        # Nucleus sampling for better responses
+                num_ctx=4096      # Context window size
             )
             logger.info(f"LLM initialized: {config.LLM_MODEL}")
             
             # Initialize hybrid search engine
             try:
-                self.search_engine = AdvancedSearchEngine(
-                    vector_store=self.vector_store.get_store(),
-                    embeddings=self.vector_store.embeddings,
-                    keyword_weight=0.3,
-                    semantic_weight=0.7,
-                    top_k=10
-                )
-                logger.info("Hybrid search engine initialized successfully")
+                # For hybrid search, we need a default collection or handle multi-collection
+                # For now, we'll disable hybrid search until we have a proper collection
+                # or implement multi-collection support in AdvancedSearchEngine
+                self.search_engine = None
+                logger.info("Hybrid search engine disabled - requires collection-specific initialization")
             except Exception as e:
                 logger.warning(f"Hybrid search engine initialization failed: {e}")
                 logger.info("Falling back to standard retrieval methods")
@@ -52,6 +53,10 @@ class FinancialRAGEngine:
             
             # Query cache for performance
             self._query_cache = {} if config.CACHE_ENABLED else None
+            
+            # Performance optimizations
+            self._retrieval_batch_size = 5  # Process fewer chunks for faster response
+            self._max_context_length = 8000  # Limit context to speed up LLM
             
         except Exception as e:
             logger.error(f"Failed to initialize RAG engine: {e}", exc_info=True)
@@ -151,7 +156,7 @@ YOUR ANALYSIS:"""
         collection_names: List[str]
     ) -> tuple[str, Dict[str, int]]:
         """
-        Format retrieved documents into context with source tracking
+        Format retrieved documents into context with source tracking and length optimization
         
         Args:
             docs: Retrieved documents
@@ -167,6 +172,10 @@ YOUR ANALYSIS:"""
         source_stats = {}
         formatted_chunks = []
         
+        # Limit context length for performance
+        max_total_length = self._max_context_length
+        current_length = 0
+        
         for doc in docs:
             # Extract filename from metadata
             source_file = Path(doc.metadata.get("source", "Unknown")).name
@@ -178,17 +187,24 @@ YOUR ANALYSIS:"""
             # Label each chunk with its source
             chunk_header = f">>> DATA FROM REPORT: {source_file} (Page {page_num}) <<<"
             formatted_chunk = f"{chunk_header}\n{doc.page_content}\n"
+            
+            # Check if adding this chunk would exceed length limit
+            if current_length + len(formatted_chunk) > max_total_length:
+                logger.info(f"Context length limit reached ({max_total_length} chars), stopping chunk addition")
+                break
+            
             formatted_chunks.append(formatted_chunk)
+            current_length += len(formatted_chunk)
         
         # Add header with available documents
         available_docs = list(source_stats.keys())
         header = f"Available Reports: {', '.join(available_docs)}\n"
-        header += f"Total Context Chunks: {len(docs)}\n"
+        header += f"Total Context Chunks: {len(formatted_chunks)} (limited for performance)\n"
         header += "\n" + "="*80 + "\n\n"
         
         context_text = header + "\n".join(formatted_chunks)
         
-        logger.debug(f"Formatted context from {len(source_stats)} unique sources")
+        logger.debug(f"Formatted context from {len(source_stats)} unique sources, length: {len(context_text)} chars")
         return context_text, source_stats
     
     def query(
@@ -346,7 +362,7 @@ YOUR ANALYSIS:"""
         k: Optional[int] = None
     ) -> tuple[List[Document], Dict]:
         """
-        Retrieve documents from collections with error handling
+        Retrieve documents from collections with performance optimizations
         
         Args:
             query: Search query
@@ -356,7 +372,7 @@ YOUR ANALYSIS:"""
         Returns:
             Tuple of (documents, source_stats)
         """
-        k = k or config.RETRIEVAL_K
+        k = k or self._retrieval_batch_size  # Use optimized batch size
         all_docs = []
         source_stats = {}
         
@@ -371,7 +387,7 @@ YOUR ANALYSIS:"""
                 logger.error(f"Retrieval failed for '{collection_names[0]}': {e}")
                 return [], {}
         
-        # Multiple collections - use multi-collection retriever
+        # Multiple collections - use multi-collection retriever with optimized batch size
         try:
             multi_retriever = self.vector_store.get_multi_collection_retriever(
                 collection_names, 

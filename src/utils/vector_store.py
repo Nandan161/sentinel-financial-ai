@@ -71,6 +71,34 @@ class FinancialVectorStore:
             logger.error(f"Error checking collection '{safe_name}': {e}")
             return False
     
+    def get_store(self, collection_name: str) -> Optional[Chroma]:
+        """
+        Get a Chroma vector store instance for a collection
+        
+        Args:
+            collection_name: Name of the collection
+            
+        Returns:
+            Chroma vector store instance or None if collection doesn't exist
+        """
+        try:
+            if not self.collection_exists(collection_name):
+                logger.warning(f"Collection '{collection_name}' does not exist")
+                return None
+            
+            vector_db = Chroma(
+                persist_directory=self.persist_dir,
+                embedding_function=self.embeddings,
+                collection_name=collection_name
+            )
+            
+            logger.debug(f"Retrieved vector store for '{collection_name}'")
+            return vector_db
+            
+        except Exception as e:
+            logger.error(f"Error getting vector store for '{collection_name}': {e}")
+            return None
+
     def get_collection_stats(self, collection_name: str) -> dict:
         """
         Get statistics about a collection

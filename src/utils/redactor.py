@@ -16,7 +16,8 @@ class FinancialRedactor:
             subprocess.run(["python", "-m", "spacy", "download", "en_core_web_lg"])
             nlp = spacy.load("en_core_web_lg")
         
-        self.analyzer = AnalyzerEngine(nlp_engine=nlp)
+        # Initialize analyzer with proper configuration
+        self.analyzer = AnalyzerEngine()
         self.anonymizer = AnonymizerEngine()
         
         # Add custom patterns for financial documents
