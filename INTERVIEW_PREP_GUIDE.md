@@ -18,6 +18,26 @@ A local, secure RAG system that:
 - Provides AI-powered insights with source attribution
 - Maintains complete audit trails
 
+## 🚀 **NEW: Advanced RAG Features (2026)**
+
+### 🛡️ **Security Dashboard (RAGAS Evaluation)**
+- **AI Truth Meter**: Measures AI truthfulness and accuracy using RAGAS framework
+- **Real-time Metrics**: Faithfulness, Answer Relevance, Context Precision, Context Recall
+- **Performance Tracking**: Historical trends and collection-wise analysis
+- **Quality Assurance**: Automatic evaluation of every query
+
+### 🕸️ **Knowledge Graph (GraphRAG)**
+- **Entity Visualization**: Interactive network graphs of companies, people, locations, financial metrics
+- **Relationship Mapping**: Visualizes connections between entities across documents
+- **Multi-Document Analysis**: Cross-document relationship discovery
+- **Export Capabilities**: Multiple formats (GraphML, GEXF, CSV)
+
+### 🤖 **Multi-Step Agent (LangGraph)**
+- **Complex Workflows**: Multi-step analytical processes with specialized tools
+- **Financial Tools**: Calculator, Search, Summarizer, Comparison tools
+- **Automated Reasoning**: LLM-powered workflow planning and execution
+- **Comprehensive Reports**: Step-by-step analysis with final reports
+
 ## 🏗️ System Architecture Deep Dive
 
 ### 1. **Ingestion Layer** (`src/utils/ingestor.py`)
@@ -178,6 +198,38 @@ def query(self, user_question, collection_names):
 - Real-time updates and interactivity
 - Easy deployment
 
+### 7. **Advanced Features Integration** (`src/integration/advanced_features.py`)
+
+**What it does:**
+- Integrates RAGAS evaluation, GraphRAG, and LangGraph agent features
+- Provides unified interface for advanced capabilities
+- Manages feature states and caching
+
+**Why this architecture:**
+- Modular design allows features to be enabled/disabled independently
+- Centralized management of advanced functionality
+- Seamless integration with existing RAG pipeline
+
+**Key Components:**
+
+#### **RAGAS Security Dashboard**
+- **Purpose**: Measure AI truthfulness and accuracy using RAGAS framework
+- **Key Metrics**: Faithfulness, Answer Relevance, Context Precision, Context Recall
+- **Integration**: Automatic evaluation of every query with real-time metrics
+- **Benefits**: Quality assurance, performance tracking, compliance monitoring
+
+#### **GraphRAG Knowledge Graph**
+- **Purpose**: Visualize relationships between entities extracted from documents
+- **Key Features**: Entity extraction, relationship mapping, interactive visualization
+- **Integration**: Uses existing document chunks and metadata
+- **Benefits**: Relationship discovery, network analysis, visual insights
+
+#### **LangGraph Multi-Step Agent**
+- **Purpose**: Perform complex multi-step analytical workflows
+- **Key Tools**: Financial Search, Calculator, Summarizer, Comparison tools
+- **Integration**: Orchestrates multiple operations with state management
+- **Benefits**: Complex analysis, automated workflows, comprehensive reporting
+
 ## 🔧 Key Libraries Explained
 
 ### **Core AI Libraries**
@@ -227,6 +279,28 @@ def query(self, user_question, collection_names):
    - **Purpose**: Web application framework
    - **Why used**: Rapid UI development, file uploads, real-time updates
    - **Key features**: Session state, widgets, deployment
+
+### **Advanced Features Libraries**
+
+9. **RAGAS**
+   - **Purpose**: RAG evaluation framework
+   - **Why used**: Quantitative measurement of AI truthfulness and quality
+   - **Key features**: Faithfulness, Answer Relevance, Context Precision, Context Recall metrics
+
+10. **NetworkX + PyVis**
+    - **Purpose**: Graph operations and visualization
+    - **Why used**: Entity relationship mapping and interactive visualization
+    - **Key features**: Graph construction, network analysis, web-based visualization
+
+11. **LangGraph**
+    - **Purpose**: Agent orchestration framework
+    - **Why used**: Multi-step workflow planning and execution
+    - **Key features**: State management, tool orchestration, workflow automation
+
+12. **scikit-learn + matplotlib**
+    - **Purpose**: Advanced analytics and visualization
+    - **Why used**: Enhanced data analysis and chart generation
+    - **Key features**: Statistical analysis, plotting capabilities
 
 ## 🔄 Complete Data Flow
 
@@ -443,6 +517,25 @@ streamlit run app.py
 
 3. **"How do you ensure PII is completely removed?"**
    - Answer: Multi-layered detection, verification, audit logging
+
+### **Advanced Features Questions**
+1. **"What is RAGAS and why is it important?"**
+   - Answer: RAGAS is a framework for evaluating RAG system quality. It measures faithfulness (truthfulness), answer relevance, context precision, and context recall to ensure AI responses are accurate and grounded in source documents.
+
+2. **"How does the Knowledge Graph add value beyond standard RAG?"**
+   - Answer: The Knowledge Graph extracts and visualizes relationships between entities (companies, people, financial metrics) across documents, enabling relationship discovery and network analysis that standard keyword search cannot provide.
+
+3. **"What makes the Multi-Step Agent different from regular RAG queries?"**
+   - Answer: The Multi-Step Agent can plan and execute complex workflows involving multiple operations (search, calculation, comparison, summarization) automatically, whereas regular RAG handles single-step queries.
+
+4. **"How do you handle performance with advanced features enabled?"**
+   - Answer: Features are modular and can be enabled/disabled independently. RAGAS evaluation is lightweight, GraphRAG processing is cached, and agent workflows are optimized for efficiency.
+
+5. **"What are the use cases for each advanced feature?"**
+   - Answer: 
+     - **RAGAS**: Quality assurance, compliance monitoring, performance optimization
+     - **Knowledge Graph**: Relationship mapping, entity analysis, visual insights
+     - **Multi-Step Agent**: Complex analysis, automated workflows, multi-document comparison
 
 ## 📚 Additional Resources
 
